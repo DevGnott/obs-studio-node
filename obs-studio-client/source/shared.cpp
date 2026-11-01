@@ -25,6 +25,10 @@ std::queue<std::function<void(Napi::Object)>> *initializerFunctions = new std::q
 std::queue<std::function<void(Napi::Object)>> *initializerFunctions = nullptr;
 UtilInt *g_util_osx;
 #endif
+#ifdef __linux__
+std::queue<std::function<void(Napi::Object)>> *initializerFunctions = nullptr;
+#include <fcntl.h>
+#endif
 
 void replaceAll(std::string &str, const std::string &from, const std::string &to)
 {

@@ -51,7 +51,13 @@ std::wstring utfWorkingDir = L"";
 #include <windows.h>
 #else
 #include <signal.h>
+#ifdef __APPLE__
 #include <libproc.h>
+#else
+#include <dirent.h>
+#include <sys/stat.h>
+#include <fstream>
+#endif
 #include <iostream>
 #include <spawn.h>
 extern char **environ;
@@ -292,6 +298,7 @@ std::shared_ptr<ipc::client> Controller::host(const std::string &uri)
 		return nullptr;
 	}
 #else
+#ifdef __APPLE__
 	g_util_osx->setServerWorkingDirectoryPath(workingDirectory);
 	pid_t pids[2048];
 	int bytes = proc_listpids(PROC_ALL_PIDS, 0, pids, sizeof(pids));
@@ -306,11 +313,43 @@ std::shared_ptr<ipc::client> Controller::host(const std::string &uri)
 			}
 		}
 	}
+#else
+	// Kill a leftover server process of this user from a previous session
+	if (DIR *procDir = opendir("/proc")) {
+		const uid_t uid = getuid();
+		while (dirent *entry = readdir(procDir)) {
+			const pid_t otherPid = static_cast<pid_t>(atoi(entry->d_name));
+			if (otherPid <= 0)
+				continue;
+
+			std::ifstream comm(std::string("/proc/") + entry->d_name + "/comm");
+			std::string name;
+			std::getline(comm, name);
+			if (name != "obs64")
+				continue;
+
+			struct stat procInfo;
+			if (stat((std::string("/proc/") + entry->d_name).c_str(), &procInfo) == 0 && procInfo.st_uid == uid)
+				kill(otherPid, SIGKILL);
+		}
+		closedir(procDir);
+	}
+#endif
 
 	pid_t pid;
 	std::vector<const char *> argv = {"obs64", uri.c_str(), version.c_str(), serverBinaryPath.c_str(), nullptr};
 
+#ifdef __APPLE__
 	int ret = posix_spawnp(&pid, serverBinaryPath.c_str(), NULL, NULL, const_cast<char *const *>(argv.data()), environ);
+#else
+	// Start the server inside its working directory so it finds data/ and obs-plugins/
+	posix_spawn_file_actions_t fileActions;
+	posix_spawn_file_actions_init(&fileActions);
+	if (!workingDirectory.empty())
+		posix_spawn_file_actions_addchdir_np(&fileActions, workingDirectory.c_str());
+	int ret = posix_spawnp(&pid, serverBinaryPath.c_str(), &fileActions, NULL, const_cast<char *const *>(argv.data()), environ);
+	posix_spawn_file_actions_destroy(&fileActions);
+#endif
 	if (ret != 0) {
 		std::cerr << "Could not spawn the server at " << serverBinaryPath.c_str() << " with error code: " << ret << std::endl;
 		return nullptr;

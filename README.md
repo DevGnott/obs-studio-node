@@ -53,6 +53,26 @@ cmake --build . --target install --config RelWithDebInfo
 ```
 Note, the only gotcha is that if you later run `yarn package:mac-arm64` command in the desktop folder instead, then you should remove *OSN.app* from the `CMAKE_INSTALL_PREFIX` path. This is because the electron-builder scripts will throw an error this is not a fully formed app bundle during codesign.
 
+### Linux
+There is no pre-built libobs for Linux, so libobs has to be built from the
+[stream-labs/obs-studio](https://github.com/stream-labs/obs-studio) fork first and installed into its own prefix
+(see `docs/linux.md` in the desktop repo for the patches and the full list of options). Then:
+```
+git submodule update --init --recursive
+cmake -S . -B build_linux -G Ninja -DCMAKE_BUILD_TYPE=RelWithDebInfo -DBUILD_TESTING=OFF \
+  -DOSN_LIBOBS_PREFIX=$HOME/slobs-libobs \
+  -DCMAKE_INSTALL_PREFIX=$HOME/streamlabs/desktop/node_modules/obs-studio-node
+cmake --build build_linux
+cmake --install build_linux
+```
+The install step copies `obs64`, libobs, its plugins and data next to `obs_studio_client.node`.
+The client is an N-API addon, so it does not have to be built against Electron's headers.
+
+Linux specifics:
+* The IPC uses the POSIX backend of lib-streamlabs-ipc (FIFOs in `/tmp`).
+* Previews are X11 child windows rendered with EGL, so Electron must run on X11 (XWayland on Wayland desktops).
+* Crash reporting (crashpad) and the virtual camera installer are not available; the virtual camera uses v4l2loopback.
+
 ### Custom OBS Build
 By default, we download a pre-built version of libobs if none is specified. However, this pre-built version may not be what you want to use or maybe you're testing a new obs feature.
 

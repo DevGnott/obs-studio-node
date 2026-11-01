@@ -189,6 +189,13 @@ if(BUILD_TESTING)
   list(APPEND CMAKE_MODULE_PATH "${catch2_SOURCE_DIR}/extras")
 endif()
 
+if(UNIX AND NOT APPLE)
+  # Linux: use the distribution's libcurl (OpenSSL backend) instead of building
+  # curl with SChannel, which only exists on Windows.
+  find_package(CURL REQUIRED)
+  add_library(libcurl INTERFACE)
+  target_link_libraries(libcurl INTERFACE CURL::libcurl)
+else()
 FetchContent_Declare(
 	libcurl
 	URL https://curl.se/download/curl-7.88.1.tar.gz
@@ -219,6 +226,8 @@ endif()
   FetchContent_Populate(libcurl)
   add_subdirectory(${libcurl_SOURCE_DIR} ${libcurl_BINARY_DIR} EXCLUDE_FROM_ALL)
 endif()
+
+endif() # UNIX AND NOT APPLE
 
 if(TARGET libcurl)
   osn_target_uses_static_msvc_runtime(libcurl)

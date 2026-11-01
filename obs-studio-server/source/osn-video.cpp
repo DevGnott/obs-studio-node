@@ -379,8 +379,10 @@ void osn::Video::SetVideoContext(void *data, const int64_t id, const std::vector
 
 #ifdef _WIN32
 	video.graphics_module = "libobs-d3d11.dll";
-#else
+#elif defined(__APPLE__)
 	video.graphics_module = "libobs-opengl.dylib";
+#else
+	video.graphics_module = "libobs-opengl"; // os_dlopen appends ".so"
 #endif
 	video.fps_num = args[0].value_union.ui32;
 	video.fps_den = args[1].value_union.ui32;

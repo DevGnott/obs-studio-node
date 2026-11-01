@@ -17,6 +17,7 @@
 ******************************************************************************/
 
 #include "obs-property.hpp"
+#include <cstring>
 
 std::shared_ptr<obs::Property> obs::Property::deserialize(std::vector<char> const &buf)
 {

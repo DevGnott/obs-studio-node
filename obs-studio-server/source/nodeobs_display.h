@@ -40,7 +40,7 @@ EXTERN_C IMAGE_DOS_HEADER __ImageBase;
 #elif defined(__APPLE__)
 
 #elif defined(__linux__) || defined(__FreeBSD__)
-
+#include "display-x11.hpp"
 #endif
 
 extern ipc::server *g_srv;
@@ -182,6 +182,7 @@ private:
 	static LRESULT CALLBACK DisplayWndProc(_In_ HWND hwnd, _In_ UINT uMsg, _In_ WPARAM wParam, _In_ LPARAM lParam);
 #elif defined(__APPLE__)
 #elif defined(__linux__) || defined(__FreeBSD__)
+	osn::x11::ChildWindow m_childWindow;
 #endif
 };
 } // namespace OBS

@@ -16,7 +16,7 @@
 
 ******************************************************************************/
 
-#include "osn-Output.hpp"
+#include "osn-output.hpp"
 
 #include "nodeobs_api.h"
 

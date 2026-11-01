@@ -21,6 +21,7 @@
 #include "osn-error.hpp"
 #include "nodeobs_api.h"
 #include "shared.hpp"
+#include <cstring>
 #include <sstream>
 #include "osn-video.hpp"
 #include "osn-encoders.hpp"
@@ -35,7 +36,7 @@
 #include <functiondiscoverykeys_devpkey.h>
 #endif
 
-#ifdef __APPLE__
+#if defined(__APPLE__) || defined(__linux__)
 #include <sys/types.h>
 #include <sys/stat.h>
 #endif
@@ -4222,6 +4223,8 @@ void OBS_settings::OBS_settings_getInputAudioDevices(void *data, const int64_t i
 #elif __APPLE__
 	const char *source_id = "coreaudio_input_capture";
 	getDevices(source_id, "device_id", rval);
+#elif defined(__linux__)
+	getDevices("pulse_input_capture", "device_id", rval);
 #endif
 
 	AUTO_DEBUG;
@@ -4238,6 +4241,8 @@ void OBS_settings::OBS_settings_getOutputAudioDevices(void *data, const int64_t 
 #elif __APPLE__
 	const char *source_id = "coreaudio_output_capture";
 	getDevices(source_id, "device_id", rval);
+#elif defined(__linux__)
+	getDevices("pulse_output_capture", "device_id", rval);
 #endif
 
 	AUTO_DEBUG;
@@ -4251,6 +4256,8 @@ void OBS_settings::OBS_settings_getVideoDevices(void *data, const int64_t id, co
 	enumVideoDevices(rval);
 #elif __APPLE__
 	getDevicesUsingDummySource("macos_avcapture", "device", rval);
+#elif defined(__linux__)
+	getDevicesUsingDummySource("v4l2_input", "device_id", rval);
 #endif
 
 	AUTO_DEBUG;

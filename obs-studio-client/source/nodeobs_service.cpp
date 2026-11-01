@@ -17,6 +17,9 @@
 ******************************************************************************/
 
 #include "nodeobs_service.hpp"
+#ifdef __linux__
+#include <sys/stat.h>
+#endif
 #include "controller.hpp"
 #include "osn-error.hpp"
 #include "polling-pacer.hpp"
@@ -441,6 +444,7 @@ Napi::Value service::OBS_service_installVirtualCamPlugin(const Napi::CallbackInf
 #elif __APPLE__
 	errorCode = g_util_osx->installPlugin();
 #endif
+	// Linux: the v4l2loopback kernel module has to be installed by the user, nothing to do here.
 	return Napi::Number::New(info.Env(), errorCode);
 }
 
@@ -538,6 +542,11 @@ Napi::Value service::OBS_service_isVirtualCamPluginInstalled(const Napi::Callbac
 	return Napi::Number::New(info.Env(), VcamInstalledStatus::NotInstalled);
 #elif __APPLE__
 	bool isInstalled = g_util_osx->isPluginInstalled();
+	return Napi::Number::New(info.Env(), isInstalled ? VcamInstalledStatus::Installed : VcamInstalledStatus::NotInstalled);
+#elif defined(__linux__)
+	// OBS' virtual camera on Linux is backed by the v4l2loopback kernel module
+	struct stat moduleInfo;
+	bool isInstalled = stat("/sys/module/v4l2loopback", &moduleInfo) == 0;
 	return Napi::Number::New(info.Env(), isInstalled ? VcamInstalledStatus::Installed : VcamInstalledStatus::NotInstalled);
 #else
 	return info.Env().Undefined();

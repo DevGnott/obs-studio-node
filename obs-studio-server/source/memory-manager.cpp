@@ -29,6 +29,8 @@
 #include <windows.h>
 #elif defined(__APPLE__)
 #include <shared.hpp>
+#elif defined(__linux__)
+#include <util/platform.h>
 #endif
 
 namespace {
@@ -46,6 +48,9 @@ uint64_t cacheBudget()
 #elif defined(__APPLE__)
 	if (g_util_osx)
 		return std::min<uint64_t>(CACHE_LIMIT, g_util_osx->getTotalPhysicalMemory() / 2);
+#elif defined(__linux__)
+	if (const uint64_t total = os_get_sys_total_size())
+		return std::min<uint64_t>(CACHE_LIMIT, total / 2);
 #endif
 	return CACHE_LIMIT;
 }
