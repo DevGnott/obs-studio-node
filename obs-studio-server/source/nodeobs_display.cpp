@@ -508,6 +508,13 @@ OBS::Display::Display(uint64_t windowHandle, enum obs_video_rendering_mode mode,
 	UINT dpi = GetDpiForWindow(m_ourWindow);
 	blog(LOG_INFO, "[DISPLAY_SCALE] OBS::Display::Display() dpiAwareness: %d; dpi: %u; display: %p", (int)dpiAwareness, dpi, this);
 
+#elif defined(__linux__) || defined(__FreeBSD__)
+	if (!osn::x11::CreateChildWindow(windowHandle, m_gsInitData.cx, m_gsInitData.cy, m_childWindow))
+		throw std::runtime_error("unable to create display window");
+
+	m_gsInitData.window.id = static_cast<uint32_t>(m_childWindow.window);
+	m_gsInitData.window.display = m_childWindow.display;
+	osn::x11::SetChildWindowStacking(m_childWindow, m_renderAtBottom);
 #endif
 	{
 		std::lock_guard lock(m_displayMtx);
@@ -607,6 +614,8 @@ OBS::Display::~Display()
 	if (!answer.m_success) {
 		std::cerr << "OBS::Display::~Display: " << answer.m_errorMessage << std::endl;
 	}
+#elif defined(__linux__) || defined(__FreeBSD__)
+	osn::x11::DestroyChildWindow(m_childWindow);
 #endif
 }
 
@@ -628,6 +637,10 @@ void OBS::Display::SetPosition(uint32_t x, uint32_t y)
 	HWND insertAfter = (m_renderAtBottom) ? HWND_BOTTOM : NULL;
 	SetWindowPos(m_ourWindow, insertAfter, m_position.first, m_position.second, m_gsInitData.cx, m_gsInitData.cy,
 		     SWP_NOCOPYBITS | SWP_NOSIZE | SWP_NOACTIVATE);
+#elif defined(__linux__) || defined(__FreeBSD__)
+	m_position.first = x;
+	m_position.second = y;
+	osn::x11::MoveResizeChildWindow(m_childWindow, x, y, m_gsInitData.cx, m_gsInitData.cy);
 #endif
 }
 
@@ -653,7 +666,11 @@ bool isNewerThanWindows7()
 
 void OBS::Display::setSizeCall(int step)
 {
+#if defined(__linux__) || defined(__FreeBSD__)
+	bool ret = false; // only Windows needs the delayed resize steps
+#else
 	BOOL ret = true;
+#endif
 
 #if defined(_WIN32)
 	int use_x, use_y;
@@ -730,6 +747,15 @@ void OBS::Display::SetSize(uint32_t width, uint32_t height)
 	obs_display_resize(m_display, m_gsInitData.cx, m_gsInitData.cy);
 
 	// Store new size.
+	UpdatePreviewArea();
+#elif defined(__linux__) || defined(__FreeBSD__)
+	m_gsInitData.cx = width;
+	m_gsInitData.cy = height;
+
+	osn::x11::MoveResizeChildWindow(m_childWindow, m_position.first, m_position.second, width, height);
+	if (width > 0 && height > 0)
+		obs_display_resize(m_display, width, height);
+
 	UpdatePreviewArea();
 #endif
 }

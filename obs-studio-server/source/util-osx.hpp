@@ -19,6 +19,7 @@
 #ifndef __UTIL_CLASS_H__
 #define __UTIL_CLASS_H__
 
+#include <cstdint>
 #include <string>
 #include <vector>
 

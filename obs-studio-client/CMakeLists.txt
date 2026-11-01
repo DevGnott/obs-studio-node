@@ -273,6 +273,14 @@ set_target_properties(
     PREFIX "" SUFFIX ".node"
 )
 
+if(UNIX AND NOT APPLE)
+    # Node resolves symlinks before picking a loader by file extension, so a
+    # versioned "obs_studio_client.node.X.Y.Z" target would be loaded as JS.
+    set_target_properties(obs_studio_client PROPERTIES NO_SONAME ON)
+    set_property(TARGET obs_studio_client PROPERTY VERSION)
+    set_property(TARGET obs_studio_client PROPERTY SOVERSION)
+endif()
+
 target_compile_definitions(obs_studio_client PRIVATE BUILDING_NODE_EXTENSION)
 
 if(WIN32)

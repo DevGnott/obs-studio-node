@@ -16,7 +16,7 @@
 
 ******************************************************************************/
 
-#include "osn-Input.hpp"
+#include "osn-input.hpp"
 #include <iostream>
 #include <ipc-server.hpp>
 #include <memory>

@@ -18,6 +18,6 @@
 
 #include "shared.hpp"
 
-#ifdef __APPLE__
+#if defined(__APPLE__) || defined(__linux__)
 UtilInt *g_util_osx;
 #endif

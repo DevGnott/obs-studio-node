@@ -84,15 +84,17 @@
 		return OSN_VERSION;                      \
 	}()
 
-#ifdef __APPLE__
+#if defined(__APPLE__) || defined(__linux__)
 #include <unistd.h>
 #include <fcntl.h>
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <limits.h>
 #include <stdlib.h>
-#include <mach-o/dyld.h>
 #include <string>
+#endif
+#ifdef __APPLE__
+#include <mach-o/dyld.h>
 #endif
 
 #define BUFFSIZE 512
@@ -125,7 +127,7 @@ static void Shutdown(void *data, const int64_t id, const std::vector<ipc::value>
 {
 	bool *shutdown = (bool *)data;
 	*shutdown = true;
-#ifdef __APPLE__
+#if defined(__APPLE__) || defined(__linux__)
 	g_util_osx->stopApplication();
 #endif
 	rval.push_back(ipc::value((uint64_t)ErrorCode::Ok));
@@ -187,7 +189,7 @@ int main(int argc, char *argv[])
 	if (const auto cef_exit_code = osn::cef::DispatchSubprocessIfNeeded(argc, argv))
 		return *cef_exit_code;
 #endif
-#ifdef __APPLE__
+#if defined(__APPLE__) || defined(__linux__)
 	std::string_view slobsStdOutPath("/tmp/slobs-stdout");
 	std::string_view slobsStdErrPath("/tmp/slobs-stderr");
 	// Reuse file discriptors 1 and 2 in case they not open at launch so output to stdout and stderr not redirected to unexpected file
@@ -195,20 +197,53 @@ int main(int argc, char *argv[])
 	bool override_std_fd = false;
 	int out_pid = -1;
 	int out_err = -1;
+#ifdef __APPLE__
 	if (fstat(1, &sb) != 0) {
 		override_std_fd = true;
-		int out_pid = open(slobsStdOutPath.data(), O_WRONLY | O_CREAT | O_DSYNC);
-		int out_err = open(slobsStdErrPath.data(), O_WRONLY | O_CREAT | O_DSYNC);
+		int out_pid = open(slobsStdOutPath.data(), O_WRONLY | O_CREAT | O_DSYNC, 0644);
+		int out_err = open(slobsStdErrPath.data(), O_WRONLY | O_CREAT | O_DSYNC, 0644);
 	}
+#else
+	// Electron may start us with fds 0-2 closed. Every one of them must be
+	// valid before anything else is opened, otherwise the X11 connection can
+	// end up on fd 2 and every write to std::cerr corrupts the X protocol.
+	if (fstat(0, &sb) != 0) {
+		const int fd = open("/dev/null", O_RDONLY);
+		if (fd > 0) {
+			dup2(fd, 0);
+			close(fd);
+		}
+	}
+	if (fstat(1, &sb) != 0) {
+		override_std_fd = true;
+		out_pid = open(slobsStdOutPath.data(), O_WRONLY | O_CREAT | O_APPEND, 0644);
+		if (out_pid >= 0 && out_pid != 1) {
+			dup2(out_pid, 1);
+			close(out_pid);
+		}
+		out_pid = 1;
+	}
+	if (fstat(2, &sb) != 0) {
+		override_std_fd = true;
+		out_err = open(slobsStdErrPath.data(), O_WRONLY | O_CREAT | O_APPEND, 0644);
+		if (out_err >= 0 && out_err != 2) {
+			dup2(out_err, 2);
+			close(out_err);
+		}
+		out_err = 2;
+	}
+#endif
 
+#ifdef __APPLE__
 	SetCefMainBundlePath(argv[0]);
+#endif
 
 	g_util_osx = new UtilInt();
 	g_util_osx->init();
 #endif
 	std::string socketPath = "";
 	std::string receivedVersion = "";
-#ifdef __APPLE__
+#if defined(__APPLE__) || defined(__linux__)
 	socketPath = "/tmp/";
 	if (argc != 4) {
 #else
@@ -227,7 +262,7 @@ int main(int argc, char *argv[])
 
 	std::string myVersion = GET_OSN_VERSION;
 
-#ifdef __APPLE__
+#if defined(__APPLE__) || defined(__linux__)
 	std::cerr << "Version recv: " << receivedVersion << std::endl;
 	std::cerr << "Version compiled " << myVersion << std::endl;
 #endif
@@ -318,7 +353,7 @@ int main(int argc, char *argv[])
 	// Reset Connect/Disconnect time.
 	sd.last_disconnect = sd.last_connect = std::chrono::high_resolution_clock::now();
 
-#ifdef __APPLE__
+#if defined(__APPLE__) || defined(__linux__)
 	// WARNING: Blocking function -> this won't return until the application
 	// receives a stop or terminate event
 	g_util_osx->runApplication();
@@ -349,7 +384,7 @@ int main(int argc, char *argv[])
 
 	// Then, shutdown OBS
 	OBS_API::destroyOBS_API();
-#ifdef __APPLE__
+#if defined(__APPLE__) || defined(__linux__)
 	util::CrashManager::DeleteBriefCrashInfoFile();
 	if (override_std_fd) {
 		close(out_pid);

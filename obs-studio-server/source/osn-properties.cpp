@@ -16,7 +16,7 @@
 
 ******************************************************************************/
 
-#include "osn-Properties.hpp"
+#include "osn-properties.hpp"
 #include "osn-error.hpp"
 #include "obs.h"
 #include "osn-source.hpp"

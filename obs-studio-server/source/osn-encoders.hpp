@@ -29,7 +29,7 @@
 //obs-x264 plugin
 #ifdef WIN32
 #define SIMPLE_ENCODER_X264 "x264"
-#elif __APPLE__
+#elif defined(__APPLE__) || defined(__linux__)
 #define SIMPLE_ENCODER_X264 "obs_x264"
 #endif
 #define ADVANCED_ENCODER_X264 "obs_x264"

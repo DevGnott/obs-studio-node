@@ -23,9 +23,18 @@ if(APPLE)
     set(LIBOBS_PLATFORM "osx")
 endif()
 
+if(UNIX AND NOT APPLE)
+    set(OSN_LINUX TRUE)
+    set(LIBOBS_PLATFORM "linux64")
+endif()
+
 ############################
 # Setup crashpad binaries
 ############################
+
+# Streamlabs only publishes crashpad builds for Windows and macOS.
+# The Linux port builds without crashpad (see util-crashmanager.cpp).
+if(NOT OSN_LINUX)
 
 if(WIN32)
     download_project(
@@ -164,6 +173,8 @@ if (APPLE)
     add_dependencies(crashpad_util crashpad_mig_output)
 endif ()
 
+endif() # NOT OSN_LINUX
+
 if (APPLE)
     find_library(COREFOUNDATION CoreFoundation)
     find_library(COCOA Cocoa)
@@ -215,11 +226,25 @@ set(
     CACHE STRING "Additional CMake prefixes required by the libobs package"
 )
 
+if(OSN_LINUX)
+    # There is no prebuilt libobs archive for Linux. Build the Streamlabs
+    # obs-studio fork yourself and point OSN_LIBOBS_PREFIX at its install prefix.
+    set(
+        OSN_LIBOBS_PREFIX
+        ""
+        CACHE PATH "Install prefix of a Linux libobs build (stream-labs/obs-studio)"
+    )
+    if(NOT OSN_LIBOBS_PREFIX)
+        message(FATAL_ERROR "On Linux, set OSN_LIBOBS_PREFIX to the install prefix of a libobs build")
+    endif()
+    set(libobs_SOURCE_DIR "${OSN_LIBOBS_PREFIX}")
+else()
 download_project(
     PROJ libobs
     URL ${OSN_LIBOBS_URL}
     UPDATE_DISCONNECTED 1
 )
+endif()
 
 list(APPEND CMAKE_PREFIX_PATH "${libobs_SOURCE_DIR}" "${libobs_SOURCE_DIR}/cmake")
 if(OSN_LIBOBS_DEPENDENCY_PREFIX_PATH)
@@ -231,6 +256,8 @@ if (WIN32)
 	include("${libobs_SOURCE_DIR}/cmake/LibObsConfig.cmake")
 elseif(APPLE)
 	include("${libobs_SOURCE_DIR}/Frameworks/libobs.Framework/Resources/cmake/LibobsConfig.cmake")
+elseif(OSN_LINUX)
+	find_package(libobs REQUIRED)
 endif()
 
 if (WIN32)
@@ -246,6 +273,19 @@ if (WIN32)
 		"${lib-streamlabs-ipc_SOURCE_DIR}/include"
 		"${libobs_SOURCE_DIR}/include"
 		"${stackwalker_SOURCE_DIR}/Main/StackWalker"
+		"${nlohmannjson_SOURCE_DIR}/single_include"
+	)
+elseif (OSN_LINUX)
+	set(PROJECT_LIBRARIES
+		lib-streamlabs-ipc
+		OBS::libobs
+		pthread
+		dl
+	)
+	set(PROJECT_INCLUDE_PATHS
+		"${CMAKE_SOURCE_DIR}/source"
+		"${PROJECT_SOURCE_DIR}/source"
+		"${lib-streamlabs-ipc_SOURCE_DIR}/include"
 		"${nlohmannjson_SOURCE_DIR}/single_include"
 	)
 else ()
@@ -465,6 +505,16 @@ elseif(WIN32)
         "${PROJECT_SOURCE_DIR}/source/cef-subprocess.hpp"
         "${PROJECT_SOURCE_DIR}/source/osn-multitrack-video-system-info.cpp"
     )
+elseif(OSN_LINUX)
+    LIST(
+        APPEND
+        osn-server_SOURCES
+        "${PROJECT_SOURCE_DIR}/source/osn-multitrack-video-system-info-linux.cpp"
+        "${PROJECT_SOURCE_DIR}/source/util-osx.hpp"
+        "${PROJECT_SOURCE_DIR}/source/util-linux.cpp"
+        "${PROJECT_SOURCE_DIR}/source/display-x11.hpp"
+        "${PROJECT_SOURCE_DIR}/source/display-x11.cpp"
+    )
 endif ()
 
 set(OSN_SERVER_CORE_SOURCES ${osn-server_SOURCES})
@@ -492,6 +542,9 @@ target_include_directories(obs-studio-server-lib PUBLIC ${PROJECT_INCLUDE_PATHS}
 
 if(WIN32)
     target_link_libraries(obs-studio-server-lib PUBLIC ${PROJECT_LIBRARIES} crashpad-bridge strmiids StackWalker)
+elseif(OSN_LINUX)
+    find_package(X11 REQUIRED)
+    target_link_libraries(obs-studio-server-lib PUBLIC ${PROJECT_LIBRARIES} X11::X11 X11::Xrandr)
 else()
     target_link_libraries(obs-studio-server-lib PUBLIC ${PROJECT_LIBRARIES} crashpad ${COREFOUNDATION} ${COCOA} ${IOSURF} ${GLKIT} ${AVFOUNDATION} ${IOKit} ${SECURITY_LIBRARY} ${BSM_LIBRARY})
 endif()
@@ -555,6 +608,14 @@ if(WIN32)
 
     target_link_options(${PROJECT_NAME} PUBLIC "$<$<CONFIG:DEBUG>:/DEBUG:FULL>")
     target_link_options(${PROJECT_NAME} PUBLIC "$<$<CONFIG:RELWITHDEBINFO>:/DEBUG:FULL>")
+elseif(OSN_LINUX)
+    # obs64 lives in ./bin, libobs and its dependencies in ./lib
+    set_property(
+        TARGET ${PROJECT_NAME}
+        APPEND
+        PROPERTY INSTALL_RPATH
+        "$ORIGIN" "$ORIGIN/../lib"
+    )
 else()
     set_target_properties(
         ${PROJECT_NAME}
@@ -592,6 +653,8 @@ if (WIN32)
 	install(TARGETS crashpad-bridge RUNTIME DESTINATION "./" PERMISSIONS ${PROGRAM_PERMISSIONS_DEFAULT} COMPONENT Runtime)
 	install(FILES $<TARGET_FILE:libcurl> DESTINATION "./" CONFIGURATIONS Debug COMPONENT Runtime)
 	install(FILES $<TARGET_PDB_FILE:libcurl> DESTINATION "./" CONFIGURATIONS Debug OPTIONAL)
+ELSEIF(OSN_LINUX)
+	install(TARGETS obs-studio-server RUNTIME DESTINATION "./bin" PERMISSIONS ${PROGRAM_PERMISSIONS_DEFAULT} COMPONENT Runtime)
 ELSE()
 	install(TARGETS obs-studio-server RUNTIME DESTINATION "./bin" PERMISSIONS ${PROGRAM_PERMISSIONS_DEFAULT} COMPONENT Runtime)
 	set(_COMMAND
@@ -609,10 +672,27 @@ IF(WIN32 AND NOT CLANG_ANALYZE_CONFIG)
     endif()
 ENDIF()
 install(DIRECTORY ${PROJECT_DATA} DESTINATION "./" OPTIONAL USE_SOURCE_PERMISSIONS)
+if(NOT OSN_LINUX)
 install(DIRECTORY ${crashpad_SOURCE_DIR}/bin/ DESTINATION "./" USE_SOURCE_PERMISSIONS)
+endif()
 
 IF(WIN32)
 	install(DIRECTORY "${libobs_SOURCE_DIR}/data/" DESTINATION "./data" USE_SOURCE_PERMISSIONS)
+elseif(OSN_LINUX)
+	# Layout mirrors Windows: data/libobs, data/obs-plugins/<module>, obs-plugins/64bit
+	install(DIRECTORY "${libobs_SOURCE_DIR}/share/obs/" DESTINATION "./data" USE_SOURCE_PERMISSIONS)
+	install(
+		DIRECTORY "${libobs_SOURCE_DIR}/lib/"
+		DESTINATION "./lib" USE_SOURCE_PERMISSIONS
+		FILES_MATCHING PATTERN "libobs*.so*"
+		PATTERN "obs-plugins" EXCLUDE
+		PATTERN "cmake" EXCLUDE
+		PATTERN "pkgconfig" EXCLUDE
+	)
+	install(
+		DIRECTORY "${libobs_SOURCE_DIR}/lib/obs-plugins/"
+		DESTINATION "./obs-plugins/64bit" USE_SOURCE_PERMISSIONS
+	)
 else ()
 	install(DIRECTORY "${libobs_SOURCE_DIR}/Frameworks/libobs.framework/Versions/A/Resources/" DESTINATION "./data/libobs" FILES_MATCHING PATTERN "*.effect" PATTERN "cmake" EXCLUDE)
 endif()
@@ -622,6 +702,8 @@ if (WIN32)
         DIRECTORY "${libobs_SOURCE_DIR}/bin/64bit/"
         DESTINATION "./" PATTERN "*.lib" EXCLUDE
     )
+elseif (OSN_LINUX)
+    # Installed above together with libobs
 else ()
 	install(
 		DIRECTORY "${libobs_SOURCE_DIR}/OBS.app/Contents/Frameworks"
@@ -645,6 +727,8 @@ install(
     DIRECTORY "${libobs_SOURCE_DIR}/obs-plugins/"
     DESTINATION "./obs-plugins"
 )
+elseif (OSN_LINUX)
+    # Installed above together with libobs
 else ()
 install(
 	DIRECTORY "${libobs_SOURCE_DIR}/OBS.app/Contents/PlugIns"

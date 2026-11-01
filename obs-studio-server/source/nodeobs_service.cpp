@@ -34,7 +34,7 @@
 
 #include "osn-multitrack-video.hpp"
 
-#ifdef __APPLE__
+#if defined(__APPLE__) || defined(__linux__)
 #include <sys/types.h>
 #include <sys/stat.h>
 #endif
@@ -394,8 +394,10 @@ static inline const char *GetRenderModule(config_t *config)
 
 #ifdef _WIN32
 	DL_OPENGL = "libobs-opengl.dll";
-#else
+#elif defined(__APPLE__)
 	DL_OPENGL = "libobs-opengl.dylib";
+#else
+	DL_OPENGL = "libobs-opengl"; // os_dlopen appends ".so"
 #endif
 
 	if (renderer != NULL) {
@@ -600,8 +602,10 @@ obs_video_info OBS_service::prepareOBSVideoInfo(bool reload, bool defaultConf)
 	obs_video_info ovi = {0};
 #ifdef _WIN32
 	ovi.graphics_module = "libobs-d3d11.dll";
-#else
+#elif defined(__APPLE__)
 	ovi.graphics_module = "libobs-opengl.dylib";
+#else
+	ovi.graphics_module = "libobs-opengl"; // os_dlopen appends ".so"
 #endif
 
 	if (reload)

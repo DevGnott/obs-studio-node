@@ -70,9 +70,11 @@
 #endif
 #define force_inline FORCE_INLINE
 
-#ifdef __GNUC__
+// glibc already uses __deprecated__ as an attribute name (and defines
+// __attribute_deprecated__ in terms of it), so redefining it breaks system headers.
+#if defined(__APPLE__)
 #define __deprecated__ __attribute_deprecated__
-#else
+#elif defined(_MSC_VER)
 #define __deprecated__ __declspec(deprecated)
 #endif
 

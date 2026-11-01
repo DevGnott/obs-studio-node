@@ -57,6 +57,10 @@
 #include <libproc.h>
 #include <signal.h>
 #include <unistd.h>
+#elif defined(__linux__)
+#include <dirent.h>
+#include <signal.h>
+#include <unistd.h>
 #endif
 
 #include "nodeobs_api.h"
@@ -89,7 +93,7 @@ PDH_HCOUNTER cpuTotal;
 util::MetricsProvider metricsClient;
 HANDLE memoryDumpEvent = INVALID_HANDLE_VALUE;
 std::filesystem::path memoryDumpFolder;
-#elif defined(__APPLE__)
+#elif defined(__APPLE__) || defined(__linux__)
 struct sigaction oldSegv = {};
 struct sigaction oldAbrt = {};
 struct sigaction oldBus = {};
@@ -291,6 +295,53 @@ nlohmann::json RequestProcessList()
 						    std::to_string(skipped_processes_count) + std::string(", Unprocessd:") +
 						    std::to_string(unprocessed_processes_count)});
 
+	return result;
+#elif defined(__linux__)
+	nlohmann::json result = nlohmann::json::object();
+
+	int total_processes_count = 0;
+	int unprocessed_processes_count = 0;
+	DIR *proc = opendir("/proc");
+	if (!proc) {
+		blog(LOG_WARNING, "Failed to get process list.");
+		return result;
+	}
+
+	while (dirent *entry = readdir(proc)) {
+		const std::string pid = entry->d_name;
+		if (pid.empty() || pid.find_first_not_of("0123456789") != std::string::npos)
+			continue;
+
+		std::ifstream status("/proc/" + pid + "/status");
+		if (!status) {
+			unprocessed_processes_count++;
+			continue;
+		}
+
+		std::string line, name, uid, gid;
+		while (std::getline(status, line)) {
+			std::istringstream fields(line);
+			std::string key, value;
+			fields >> key >> value;
+			if (key == "Name:")
+				name = value;
+			else if (key == "Uid:")
+				uid = value;
+			else if (key == "Gid:")
+				gid = value;
+		}
+
+		std::ostringstream oss;
+		oss << name << " UID " << uid << " GID " << gid;
+		result.push_back({pid, oss.str()});
+		if (++total_processes_count >= 150)
+			break;
+	}
+	closedir(proc);
+
+	std::ostringstream oss;
+	oss << "Total " << total_processes_count << " unreadable " << unprocessed_processes_count;
+	result.push_back({std::to_string(0), oss.str()});
 	return result;
 #else
 	nlohmann::json result = nlohmann::json::object();
@@ -507,7 +558,7 @@ bool util::CrashManager::Initialize(char *path, const std::string &appdata)
 	if (!SetupCrashpad()) {
 		return false;
 	}
-#if defined(__APPLE__)
+#if defined(__APPLE__) || defined(__linux__)
 	InstallSigActionHandler();
 #endif
 
@@ -1358,7 +1409,7 @@ void util::CrashManager::SaveToAppStateFile()
 	}
 }
 
-#if defined(__APPLE__)
+#if defined(__APPLE__) || defined(__linux__)
 void util::CrashManager::SignalActionHandler(int sig, siginfo_t *signalInfo, void *)
 {
 	// Restore previous signal handler so it can handle our upcoming abort request

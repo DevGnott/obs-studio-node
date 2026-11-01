@@ -20,6 +20,7 @@
 
 #include <obs.h>
 
+#include <condition_variable>
 #include <mutex>
 #include <optional>
 #include <queue>

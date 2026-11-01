@@ -87,10 +87,14 @@
 #include <util/windows/WinHandle.hpp>
 #endif
 
-#ifdef __APPLE__
+#if defined(__APPLE__) || defined(__linux__)
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <fcntl.h>
+#endif
+
+#ifdef __linux__
+#include <sys/syscall.h>
 #endif
 
 #include "osn-error.hpp"
@@ -515,6 +519,8 @@ static void node_obs_log(int log_level, const char *msg, va_list args, void *par
 
 #ifdef WIN32
 	std::string thread_id = std::to_string(GetCurrentThreadId());
+#elif defined(__linux__)
+	std::string thread_id = std::to_string(static_cast<uint64_t>(syscall(SYS_gettid)));
 #else
 	// Not sure it is the best way for macOS.
 	uint64_t tid;
@@ -856,6 +862,10 @@ void addModulePaths()
 	obs_add_module_path(std::string(g_moduleDirectory + "/PlugIns/%module%.plugin/Contents/MacOS/").c_str(),
 			    std::string(g_moduleDirectory + "/PlugIns/%module%.plugin/Contents/Resources/").c_str());
 #else
+	// Linux uses the same layout as Windows (see obs-studio-server/CMakeLists.txt)
+	obs_add_module_path(std::string(g_moduleDirectory + "/obs-plugins/64bit").c_str(),
+			    std::string(g_moduleDirectory + "/data/obs-plugins/%module%").c_str());
+	obs_add_module_path(std::string(slobs_plugin + "/obs-plugins/64bit").c_str(), std::string(slobs_plugin + "/data/obs-plugins/%module%").c_str());
 
 #endif
 }
@@ -1368,7 +1378,7 @@ bool DisableAudioDucking(bool disable)
 void OBS_API::setAudioDeviceMonitoring(void)
 {
 /* load audio monitoring */
-#if defined(_WIN32) || defined(__APPLE__)
+#if defined(_WIN32) || defined(__APPLE__) || defined(__linux__)
 	const char *device_name = config_get_string(ConfigManager::getInstance().getBasic(), "Audio", "MonitoringDeviceName");
 	const char *device_id = config_get_string(ConfigManager::getInstance().getBasic(), "Audio", "MonitoringDeviceId");
 

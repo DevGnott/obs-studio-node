@@ -26,11 +26,15 @@
 #include <mutex>
 #include <queue>
 #include <thread>
+#if defined(__APPLE__) || defined(__linux__)
+#include <signal.h>
+#endif
 
 #undef strtoll
 #include "nlohmann/json.hpp"
 
-#ifndef _DEBUG
+// Crashpad is only available for Windows and macOS builds
+#if !defined(_DEBUG) && !defined(__linux__)
 #define ENABLE_CRASHREPORT
 #endif
 
@@ -87,7 +91,7 @@ private:
 	static void HandleCrash(const std::string &crashInfo, bool callAbort = true) noexcept;
 	static void SaveBriefCrashInfoToFile();
 	static void UpdateBriefCrashInfo();
-#if defined(__APPLE__)
+#if defined(__APPLE__) || defined(__linux__)
 	static void InstallSigActionHandler();
 	static void SignalActionHandler(int sig, siginfo_t *, void *);
 #endif
